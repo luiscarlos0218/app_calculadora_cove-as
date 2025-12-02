@@ -1,5 +1,6 @@
-streamlit
-pandas
-altair
-databricks-sql-connector
-numpy
+streamlit==1.45.1
+pandas==2.2.3
+altair==5.5.0
+databricks-sql-connector==4.2.1
+numpy==2.1.3
+
