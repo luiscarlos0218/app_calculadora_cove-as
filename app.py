@@ -412,15 +412,15 @@ col1, col2 = st.columns(2)
 col3, col4 = st.columns(2)
 
 with col1:
-    st.success("**Consumo [kWh]**")
+    st.info("**Consumo [kWh]**")
     st.metric(label="", value=f"{consumo_bb:.2f}")
 
 with col2:
-    st.error("**Eficiencia[%]**")
+    st.info("**Eficiencia[%]**")
     st.metric(label="", value=f"{eficiencia*100:.2f}")
 
 with col3:
-    st.warning("**BEP[%]**")
+    st.info("**BEP[%]**")
     st.metric(label="", value=f"{BEP*100:.2f}")
 
 with col4:
@@ -463,4 +463,5 @@ if st.button("Cargar datos desde Hive"):
         
         except Exception as e:
             st.error(f"Error al conectar o ejecutar consulta: {e}")
+
 
