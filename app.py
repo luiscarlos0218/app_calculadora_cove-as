@@ -11,6 +11,9 @@ import altair as alt
 from databricks import sql
 import math
 import numpy as np
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from io import BytesIO
 
 
 
@@ -22,11 +25,11 @@ import numpy as np
 
 st.set_page_config(
 page_title="Calculadora Coveñas",
-page_icon="🧮",
+page_icon="🔢",
 layout="wide"
 )
 
-st.title("🧮 Calculadora bombas booster Coveñas")
+st.title("🔢 Calculadora bombas booster Coveñas")
 st.write("Ingresa valores y observa resultados y gráficos en tiempo real.")
 
 # ==========================
@@ -144,8 +147,50 @@ st.header("🔄 Actualizar gráfica desde Databricks")
 if st.button("Actualizar gráfica"):
     with st.spinner("Consultando Databricks y actualizando datos..."):
         try: 
-                data_2025= pd.read_excel('BD_CENIT_2025.xlsx')
-                df_databricks=data_2025[['Estampa de tiempo','COV_FIT_1315A', 'COV_TIT_1317A', 'COV_VIS_1314',
+                
+                
+
+            # === Autenticación ===
+            gauth = GoogleAuth()
+            gauth.LoadCredentialsFile("mycreds.txt")
+            if gauth.credentials is None:
+                raise Exception("⚠️ No se encontró el archivo mycreds.txt o no tiene credenciales válidas.")
+            elif gauth.access_token_expired:
+                gauth.Refresh()
+                gauth.SaveCredentialsFile("mycreds.txt")
+            else:
+                gauth.Authorize()
+            
+            drive = GoogleDrive(gauth)
+            
+            # === Buscar el archivo por nombre ===
+            files = drive.ListFile({
+                'q': "(title contains 'BD_CENIT_2025.xlsx') and trashed=false"
+            }).GetList()
+            
+            for f in files:
+                print(f"📄 Encontrado: {f['title']} (ID: {f['id']})")
+            
+            # === Descargar a memoria con BytesIO ===
+            if files:
+                file_id = files[0]['id']
+                downloaded = drive.CreateFile({'id': file_id})
+                file_content = downloaded.GetContentString()  # esto funciona para texto
+                # Para binarios (Excel, imágenes, etc.) usamos GetContentFile con BytesIO
+                file_bytes = BytesIO(downloaded.GetContentBinary())
+            
+                # Leer directamente con pandas
+                data_2025 = pd.read_excel(file_bytes)
+            
+                # Limpiar nombres de columnas
+                data_2025.columns = [
+                    col.replace(' ', '_').translate({ord(c): None for c in ',;{}()\n\t='})
+                    for col in data_2025.columns
+                ]
+            
+            
+                #data_2025= pd.read_excel('BD_CENIT_2025.xlsx')
+                df_databricks=data_2025[['Estampa_de_tiempo','COV_FIT_1315A', 'COV_TIT_1317A', 'COV_VIS_1314',
                                   'COV_PT_1401B', 'COV_PT_1402B', 'COV_PT_1403B', 'COV_PT_1404B',
                                   'COV_PT_1405B', 'COV_PT_1406B', 'COV_PT_1407B']]
                 
@@ -248,7 +293,7 @@ if st.button("Actualizar gráfica"):
                 st.session_state["df_databricks"] = df_databricks
         
                 st.success("Datos actualizados correctamente.")
-                #st.dataframe(df_databricks)
+                st.dataframe(df_databricks)
 
         except Exception as e:
             st.error(f"Error al ejecutar consulta: {e}")
@@ -416,6 +461,43 @@ with col3:
 with col4:
     st.info("**Viscosidad corregida**")
     st.metric(label="", value=f"{viscosidad_corregida:.2f}")
+
+
+
+
+# ==========================
+
+# BOTÓN PARA DATOS DE DATBRICKS
+
+# ==========================
+
+
+st.header("📂 Datos desde Databricks")
+
+if st.button("Cargar datos desde Hive"):
+    with st.spinner("Conectando a Databricks y obteniendo datos..."):
+        try:
+            # Parámetros de conexión
+            server_hostname = "adb-590505761549116.16.azuredatabricks.net"
+            http_path = "/sql/1.0/warehouses/c26810f7bbe8e43e"
+            
+            # Conexión interactiva (abre navegador)
+            with sql.connect(
+                server_hostname=server_hostname,
+                http_path=http_path,
+                auth_type="browser"
+            ) as connection:
+                cursor = connection.cursor()
+                query = "SELECT Estampa_de_tiempo, COV_FIT_1315A, COV_TIT_1317A, COV_VIS_1314, COV_PT_1401B, COV_PT_1402B, COV_PT_1403B, COV_PT_1404B, COV_PT_1405B, COV_PT_1406B, COV_PT_1407B FROM energia_consumos.Base_general_excel"  # cualquier 4 filas de ejemplo
+                cursor.execute(query)
+                data = cursor.fetchall()
+                df_databricks = pd.DataFrame(data, columns=[desc[0] for desc in cursor.description])
+            
+            st.success("Datos cargados correctamente desde Databricks")
+            st.dataframe(df_databricks)
+        
+        except Exception as e:
+            st.error(f"Error al conectar o ejecutar consulta: {e}")
 
 
 
