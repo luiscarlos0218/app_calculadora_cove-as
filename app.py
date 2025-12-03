@@ -11,9 +11,6 @@ import altair as alt
 from databricks import sql
 import math
 import numpy as np
-from pydrive.auth import GoogleAuth
-from pydrive.drive import GoogleDrive
-from io import BytesIO
 
 
 
@@ -46,6 +43,7 @@ st.sidebar.header("📡 Señales")
 
 vis_30 = st.sidebar.number_input("Viscosidad 30", value=62.13)
 vis_50 = st.sidebar.number_input("Viscosidad 50", value=20.07)
+Viscosidad=st.sidebar.number_input("Viscosidad", value=50.17)
 temp = st.sidebar.number_input("Temperatura", value=97.42)
 numero_bombas = st.sidebar.number_input("Numero de bombas", value=7.0)
 flujo = st.sidebar.number_input("Flujo", value=7153.11)
@@ -91,7 +89,7 @@ FC=	1.424270025
 PSI_Tank=0
 
 viscosidad_corregida=viscosidad_correcion(vis_30,vis_50, temp)
-B= k* ((viscosidad_corregida**0.5 * HBEP**0.0625) / (QBEP_W**0.375 * N**0.25))
+B= k* ((Viscosidad**0.5 * HBEP**0.0625) / (QBEP_W**0.375 * N**0.25))
 Cq=math.e ** (-0.165 * (math.log10(B) ** 3.15))
 ceff= B**(-0.0547 * (B ** 0.69))
 flujo_bb=flujo/numero_bombas
@@ -150,44 +148,7 @@ if st.button("Actualizar gráfica"):
                 
                 
 
-            # === Autenticación ===
-            gauth = GoogleAuth()
-            gauth.LoadCredentialsFile("mycreds.txt")
-            if gauth.credentials is None:
-                raise Exception("⚠️ No se encontró el archivo mycreds.txt o no tiene credenciales válidas.")
-            elif gauth.access_token_expired:
-                gauth.Refresh()
-                gauth.SaveCredentialsFile("mycreds.txt")
-            else:
-                gauth.Authorize()
-            
-            drive = GoogleDrive(gauth)
-            
-            # === Buscar el archivo por nombre ===
-            files = drive.ListFile({
-                'q': "(title contains 'BD_CENIT_2025.xlsx') and trashed=false"
-            }).GetList()
-            
-            for f in files:
-                print(f"📄 Encontrado: {f['title']} (ID: {f['id']})")
-            
-            # === Descargar a memoria con BytesIO ===
-            if files:
-                file_id = files[0]['id']
-                downloaded = drive.CreateFile({'id': file_id})
-                file_content = downloaded.GetContentString()  # esto funciona para texto
-                # Para binarios (Excel, imágenes, etc.) usamos GetContentFile con BytesIO
-                file_bytes = BytesIO(downloaded.GetContentBinary())
-            
-                # Leer directamente con pandas
-                data_2025 = pd.read_excel(file_bytes)
-            
-                # Limpiar nombres de columnas
-                data_2025.columns = [
-                    col.replace(' ', '_').translate({ord(c): None for c in ',;{}()\n\t='})
-                    for col in data_2025.columns
-                ]
-            
+                data_2025=pd.read_excel('BD_COVENAS_2025.xlsx')
             
                 #data_2025= pd.read_excel('BD_CENIT_2025.xlsx')
                 df_databricks=data_2025[['Estampa_de_tiempo','COV_FIT_1315A', 'COV_TIT_1317A', 'COV_VIS_1314',
@@ -465,39 +426,9 @@ with col4:
 
 
 
-# ==========================
-
-# BOTÓN PARA DATOS DE DATBRICKS
-
-# ==========================
 
 
-st.header("📂 Datos desde Databricks")
 
-if st.button("Cargar datos desde Hive"):
-    with st.spinner("Conectando a Databricks y obteniendo datos..."):
-        try:
-            # Parámetros de conexión
-            server_hostname = "adb-590505761549116.16.azuredatabricks.net"
-            http_path = "/sql/1.0/warehouses/c26810f7bbe8e43e"
-            
-            # Conexión interactiva (abre navegador)
-            with sql.connect(
-                server_hostname=server_hostname,
-                http_path=http_path,
-                auth_type="browser"
-            ) as connection:
-                cursor = connection.cursor()
-                query = "SELECT Estampa_de_tiempo, COV_FIT_1315A, COV_TIT_1317A, COV_VIS_1314, COV_PT_1401B, COV_PT_1402B, COV_PT_1403B, COV_PT_1404B, COV_PT_1405B, COV_PT_1406B, COV_PT_1407B FROM energia_consumos.Base_general_excel"  # cualquier 4 filas de ejemplo
-                cursor.execute(query)
-                data = cursor.fetchall()
-                df_databricks = pd.DataFrame(data, columns=[desc[0] for desc in cursor.description])
-            
-            st.success("Datos cargados correctamente desde Databricks")
-            st.dataframe(df_databricks)
-        
-        except Exception as e:
-            st.error(f"Error al conectar o ejecutar consulta: {e}")
 
 
 
