@@ -143,33 +143,11 @@ st.header("🔄 Actualizar gráfica desde Databricks")
 
 if st.button("Actualizar gráfica"):
     with st.spinner("Consultando Databricks y actualizando datos..."):
-        try:
-            # Parámetros de conexión
-            server_hostname = "adb-590505761549116.16.azuredatabricks.net"
-            http_path = "/sql/1.0/warehouses/c26810f7bbe8e43e"
-
-            with sql.connect(
-                server_hostname=server_hostname,
-                http_path=http_path,
-                auth_type="browser"
-            ) as connection:
-
-                cursor = connection.cursor()
-
-                query = """
-                SELECT Estampa_de_tiempo, COV_FIT_1315A, COV_TIT_1317A, COV_VIS_1314,
-                       COV_PT_1401B, COV_PT_1402B, COV_PT_1403B, COV_PT_1404B,
-                       COV_PT_1405B, COV_PT_1406B, COV_PT_1407B
-                FROM energia_consumos.Base_general_excel
-                order by Estampa_de_tiempo  desc
-                """
-
-                cursor.execute(query)
-                data = cursor.fetchall()
-
-                df_databricks = pd.DataFrame(
-                    data, columns=[desc[0] for desc in cursor.description]
-                )
+        try: 
+                data_2025= pd.read_excel('BD_CENIT_2025.xlsx')
+                df_databricks=data_2025[['Estampa de tiempo','COV_FIT_1315A', 'COV_TIT_1317A', 'COV_VIS_1314',
+                                  'COV_PT_1401B', 'COV_PT_1402B', 'COV_PT_1403B', 'COV_PT_1404B',
+                                  'COV_PT_1405B', 'COV_PT_1406B', 'COV_PT_1407B']]
                 
                 #Calculo de variables 
                 viscosidad_corregida_df = df_databricks["COV_VIS_1314"]
@@ -186,9 +164,9 @@ if st.button("Actualizar gráfica"):
                 (QBEP_W**0.375 * N**0.25))
                 
                 df_databricks["Cq"] = np.exp(-0.165 * (np.log10(df_databricks["B"]) ** 3.15))
-
+    
                 df_databricks["ceff"] = df_databricks["B"] ** (-0.0547 * (df_databricks["B"] ** 0.69))
-
+    
                 columnas_presiones = ["COV_PT_1401B","COV_PT_1402B","COV_PT_1403B",
                         "COV_PT_1404B","COV_PT_1405B","COV_PT_1406B","COV_PT_1407B"]
                     
@@ -198,7 +176,7 @@ if st.button("Actualizar gráfica"):
                 df_databricks["flujo_bb"] = flujo / df_databricks["numero_bombas"]
                 
                 df_databricks["flujo_agua"] = df_databricks["flujo_bb"] / df_databricks["Cq"]
-
+    
                 df_databricks["flujo_m3"] = df_databricks["flujo_bb"] / 6.28
                 
                 df_databricks["ch"] = 1 - (1 - df_databricks["Cq"]) * (df_databricks["flujo_m3"] / QBEP_W) ** 0.75
@@ -264,13 +242,13 @@ if st.button("Actualizar gráfica"):
                 
                 # ----- Consumo total -----
                 df_databricks["consumo_bb"] = (df_databricks["consumo_eje"] * numero_bombas) / df_databricks["eficiencia_motor"]
-
-
-            # Guardar en session state
-            st.session_state["df_databricks"] = df_databricks
-
-            st.success("Datos actualizados correctamente.")
-            #st.dataframe(df_databricks)
+    
+    
+                # Guardar en session state
+                st.session_state["df_databricks"] = df_databricks
+        
+                st.success("Datos actualizados correctamente.")
+                #st.dataframe(df_databricks)
 
         except Exception as e:
             st.error(f"Error al ejecutar consulta: {e}")
@@ -317,7 +295,7 @@ if "df_databricks" in st.session_state:
         )
     )
 
-    # --- Crear 4 puntos ficticios ---
+    # --- puntos--
     points = pd.DataFrame({
         "flujo_agua": [0, 571.4285714, 857.1428571, 1142.857143, 1428.571429],
         "eficiencia_porc": [0, 64, 77, 82.8, 76],
@@ -344,7 +322,7 @@ if "df_databricks" in st.session_state:
     # --- Línea de tendencia cúbica ---
     trend_efic = (
         alt.Chart(pd.DataFrame({"flujo_agua": x_graf, "eficiencia_porc": y_graf_efi}))
-        .mark_line(color="red", strokeDash=[5,2])
+        .mark_line(color="black", strokeDash=[5,2])
         .encode(
             x="flujo_agua:Q",
             y="eficiencia_porc:Q",
@@ -364,7 +342,7 @@ if "df_databricks" in st.session_state:
 
     scatter_point_efic = (
         alt.Chart(points)
-        .mark_point(size=200, color="red", shape="triangle-up")
+        .mark_point(size=200, color="black", shape="triangle-up")
         .encode(
             x="flujo_agua:Q",
             y="eficiencia_porc:Q",
@@ -376,8 +354,6 @@ if "df_databricks" in st.session_state:
     )
     
     
-    
-
     scatter_point_tdh = (
         alt.Chart(points)
         .mark_point(size=100, color="red", shape="triangle-up")
@@ -391,10 +367,24 @@ if "df_databricks" in st.session_state:
         )
     )
     
-       # --- Combinar con doble eje ---
+    # --- Grupo TDH 
+    tdh_group = alt.layer(
+        scatter_tdh,
+        trend_tdh,
+        scatter_point_tdh
+    )
+    
+    # --- Grupo Eficiencia 
+    efic_group = alt.layer(
+        scatter_efic,
+        trend_efic,
+        scatter_point_efic
+    )
+    
+    # --- Combinar ambos grupos con doble eje
     combined_chart = alt.layer(
-        scatter_tdh+ trend_tdh+ scatter_point_tdh,
-        scatter_efic + trend_efic + scatter_point_efic
+        tdh_group,
+        efic_group
     ).resolve_scale(
         y='independent'
     )
@@ -406,7 +396,7 @@ else:
     st.info("🔄 Presiona **Actualizar gráfica** para cargar los datos.")
 
 
-st.header("📈 ")
+st.header("Calculos ")
 
 col1, col2 = st.columns(2)
 col3, col4 = st.columns(2)
@@ -429,39 +419,5 @@ with col4:
 
 
 
-
-# ==========================
-
-# BOTÓN PARA DATOS DE DATBRICKS
-
-# ==========================
-
-
-st.header("📂 Datos desde Databricks")
-
-if st.button("Cargar datos desde Hive"):
-    with st.spinner("Conectando a Databricks y obteniendo datos..."):
-        try:
-            # Parámetros de conexión
-            server_hostname = "adb-590505761549116.16.azuredatabricks.net"
-            http_path = "/sql/1.0/warehouses/c26810f7bbe8e43e"
-            
-            # Conexión interactiva (abre navegador)
-            with sql.connect(
-                server_hostname=server_hostname,
-                http_path=http_path,
-                auth_type="browser"
-            ) as connection:
-                cursor = connection.cursor()
-                query = "SELECT Estampa_de_tiempo, COV_FIT_1315A, COV_TIT_1317A, COV_VIS_1314, COV_PT_1401B, COV_PT_1402B, COV_PT_1403B, COV_PT_1404B, COV_PT_1405B, COV_PT_1406B, COV_PT_1407B FROM energia_consumos.Base_general_excel"  # cualquier 4 filas de ejemplo
-                cursor.execute(query)
-                data = cursor.fetchall()
-                df_databricks = pd.DataFrame(data, columns=[desc[0] for desc in cursor.description])
-            
-            st.success("Datos cargados correctamente desde Databricks")
-            st.dataframe(df_databricks)
-        
-        except Exception as e:
-            st.error(f"Error al conectar o ejecutar consulta: {e}")
 
 
